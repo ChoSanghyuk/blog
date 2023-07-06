@@ -4,7 +4,7 @@
 
 ## 개요
 
-현재는 Spring AOP를 사용해서, `C1Service` 라는 클래스에서 select로 시작되는 메소드가 null 혹은 빈 List를 반환할 경우, 나중에 재처리할 대상으로 분류하고 있다. 
+현재는 Spring AOP를 사용해서, C1Service 라는 클래스에서 select로 시작되는 메소드가 null 혹은 빈 List를 반환할 경우, 나중에 재처리할 대상으로 분류하고 있다.
 
 하지만 특정 몇몇 메소드에 대해서는 null 혹은 빈 List를 반환하더라도 재처리 대상으로 분류를 안 하게끔 로직 수정이 필요해졌다.
 
@@ -44,7 +44,7 @@ Annotation이란 프로그램 부수적인 정보를 제공하는 일종의 메�
 
 
 
-## 생성
+기본적인 생성 코드는 다음과 같다
 
 ```java
 @Target({ElementType.METHOD})
@@ -56,15 +56,13 @@ public @interface ReProcessExclusion {
 
 ### @interface
 
-어노테이션으로 생성함을 명시합니다.
+어노테이션으로 생성함을 명시한다.
 
 
 
 ### @Target
 
-어노테이션이 생성될 수 있는 위치를 지정합니다.
-
-`ElementType` 의 값은 다음과 같다.
+어노테이션이 생성될 수 있는 위치를 지정한다.
 
 | ElementType 종류 | description                            |
 | ---------------- | -------------------------------------- |
@@ -82,16 +80,68 @@ public @interface ReProcessExclusion {
 
 
 
+### @Retension
+
+어노테이션이 언제까지 유효한지를 지정한다.
+
+| RententionPolicy 종류 | description                      |
+| --------------------- | -------------------------------- |
+| SOURCE                | 컴파일 이후 어노테이션 정보 소멸 |
+| CLASS                 | 클래스를 참조할 때까지 유효      |
+| RUNTIME               | 컴파일 이후에도 참조 가능        |
 
 
 
+여기서 `CLASS` 의미가 명확하지 않아서 조금 더 찾아보았는데, 정리하자면 다음과 같다.
 
 
 
-위치
+#### SOURCE
+
+소스 코드(.java)까지만 남아있으며, 컴파일러에 의해 소멸되어, 런타임 중에는 더 이상 유효하지 않는다.
+
+document 정보 입력 용 혹은 **컴파일 시 byte 코드를 생성**하는 용도로 사용된다.
+
+대표적인 예시로는 `@Getter`,  `@Setter` 같은 것들이 있다.
+
+컴파일 시, `@Getter` 어노테이션은 사라지지만, 실제 getter 코드가 바이트코드로 생성되어 동작할 수 있게끔 한다.
+
+
+
+#### CLASS
+
+컴파일러에 의해서 유지되어 class file 안에 저장되지만, 런타임 시에 접근이 불가능하다. **Java Reflection의 대상이 아니지만, 클래스 내부에 정보가 유지**되는 것을 의미한다.
+
+대표적인 예시로는 `@NonNull`이 있다.
+
+class 내부에서 `@NonNull` 부착된 필드가 있을 때, 런타임 도중 reflection이 `@NoNull`에 대한 정보를 가지고 있지 않지만, 해당 필드에  null이 들어가지 못 하게하는 성질은 class 내부에서 유지된다.
+
+
+
+### RUNTIME
+
+사실상 정보가 안 사라지며, 런타임 중에도 쭉 유지된다. 런타임 중에 Reflection API 등을 사용하여 어노테이션 정보를 알수가 있다는 의미한다.
+
+대표적인 예시로는 `@Bean`,  `@Controller`,  `@Autowired`  등이 있다.
+
+
+
+나의 경우에는 Runtime 중에도 계속 어노테이션 정보가 활용되어야 하기 때문에, `RententionPolicy.RUNTIME` 으로 지정해서 사용하였다.
+
+
+
+## Pointcut 수정
+
+이제 내가 생성한 annotation이 달려있는 메소드에는 AOP가 적용되지 않게끔 Pointcut 수정이 필요하다.
+
+테스트 해본 결과 1. 하나의 Poincut 안에서 `execution`과 `annotation` 라는 두 가지의 **PCD(PointCut Designator)**를 조합하는 방식과, 2. 각각 두개의 Poincut으로 생성하고, 두 개의 Pointcut을 조합하는 방식 모두 성공하였다.
+
+
+
+### 1. 하나의 Poincut 안에서 두 개의 PCD 조합
 
 ``` java
-@Pointcut("execution(* com.sample.package.C1Service.select*(..))) && !@annotation(com.your.package.annotation.NoLogging)")
+@Pointcut("execution(* com.sample.package.C1Service.select*(..))) && !@annotation(com.sample.package.common.ReProcessExclustion)")
 private void reprocessing(){
     
 }
@@ -99,21 +149,20 @@ private void reprocessing(){
 
 
 
+### 2. 두 개의 Pointcut 조합
+
 ```java
 @Pointcut("execution(* com.sample.package.C1Service.select*(..))")
 private void reprocessingTarget(){
-    
 }
 
 
 @Pointcut("!@annotation(com.sample.package.common.ReProcessExclustion)")
 private void reprocessingExclusion(){
-    
 }
 
 @Pointcut("reProcessingTarget() && reProcessingExclusion()")
 private void reprocessing{
-    
 }
 
 
@@ -121,12 +170,20 @@ private void reprocessing{
 
 
 
+위 처럼 PCD를 조합할 때에는 다음의 연산자를 사용할 수 있다.
+
+- `&&` : and 조건
+- `||` : or 조건
+- `!` : not
 
 
 
 
-https://shinsunyoung.tistory.com/83
 
-https://www.javatpoint.com/spring-boot-annotations
+## 참고자료
 
-https://gmoon92.github.io/spring/aop/2019/05/06/pointcut.html
+- 해어린 블로그, Spring Boot Custom Annotation 만들기, https://shinsunyoung.tistory.com/83
+
+- 기본기를 쌓는 정아마추어 코딩블로그, 아무 관심 없던 @Retention 어노테이션 정리, https://jeong-pro.tistory.com/234
+
+- Moon's Development Blog, 포인트 컷의 다양한 표현식,https://gmoon92.github.io/spring/aop/2019/05/06/pointcut.html
