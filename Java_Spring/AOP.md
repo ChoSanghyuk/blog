@@ -17,3 +17,33 @@ DAO을 감싸는 service 혹은 Util 클래스에서도 DAO가 Exception을 thro
 
 
 그리고  DAO에서 Exception을 throw 하지 않으면, Exception에 대한 처리가 없는 상태에서 Exception 발생해서 그대로 프로그램 종료됨/
+
+
+
+```java
+@Aspect
+@Component
+@Slf4j
+public class DaoAspect {
+    
+    @Pointcut("execution(* com.nurt.spam.dao.C1Dao.*(..))")
+    private void pointcut(){}
+    
+    @Arount(value="pointcut()")
+    public Ojbect doThrowing(ProceedingJoinPoint joinPoint) throws Throwable {
+        
+        try{
+            Object rtn = joinPoint.proceed();
+            return rtnl
+        } catch (EmptyResultDataAccessException ex) {
+            log.error("Message : {}", ex.getMessage);
+            return null;
+        }
+        
+    }
+}
+```
+
+- `ProceedingJoinPoint`는 `@Around` 에서만 가능
+- `@Around`에서 Throw되는 Exception 변경 가능
+
