@@ -29,14 +29,14 @@ public class DaoAspect {
     @Pointcut("execution(* com.nurt.spam.dao.C1Dao.*(..))")
     private void pointcut(){}
     
-    @Arount(value="pointcut()")
-    public Ojbect doThrowing(ProceedingJoinPoint joinPoint) throws Throwable {
+    @Around(value="pointcut()")
+    public Object doThrowing(ProceedingJoinPoint joinPoint) throws Throwable {
         
         try{
             Object rtn = joinPoint.proceed();
-            return rtnl
+            return rtn
         } catch (EmptyResultDataAccessException ex) {
-            log.error("Message : {}", ex.getMessage);
+            log.error("Message : {}", ex.getMessage());
             return null;
         }
         
