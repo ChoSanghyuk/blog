@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GraphQL Query and Output</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            background-color: #f5f5f5;
+        }
+        .content {
+            width: 80%;
+            max-width: 1200px;
+            background-color: #fff;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+            box-sizing: border-box;
+        }
+        .section {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+        .left, .right {
+            width: 48%;
+        }
+        textarea, pre {
+            width: 100%;
+            height: 400px;
+            box-sizing: border-box;
+            font-family: monospace;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            background-color: #f9f9f9;
+            resize: none;
+            outline: none;
+        }
+        pre {
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="content">
+        <h1>GraphQL Query and Output</h1>
+        <div class="section">
+            <div class="left">
+                <h2>GraphQL Query</h2>
+                <textarea id="graphql-query">
+# Type your GraphQL query here
+{
+  user(id: "1") {
+    id
+    name
+    email
+  }
+}</textarea>
+            </div>
+            <div class="right">
+                <h2>Output Data</h2>
+                <pre id="output-data">
+{
+  "data": {
+    "user": {
+      "id": "1",
+      "name": "John Doe",
+      "email": "john.doe@example.com"
+    }
+  }
+}</pre>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
