@@ -97,7 +97,7 @@
 
 
 
-케이스3. 프록시 컨트랙트와 로직 컨트랙트 간의 함수 충돌 
+케이스3. 프록시 컨트랙트와 로직 컨트랙트 간의 함수 충돌  (proxy selector clashing)
 
 마지막으로 프록시 컨트랙트와 로직 컨트랙트 간 함수 레벨에서 충돌이 발생하는 경우가 존재한다. 
 
@@ -112,49 +112,63 @@ function _fallback() internal virtual {
 }
 ```
 
-그런데 만약 EVM이 인식하기에 기능 컨트랙트의 함수와 같은 함수가 프록시에 존재할 경우, fallback을 통한 위임이 아닌 프록시의 함수가 수행될 수 있다. 클라이언트는 기능 컨트랙트의 함수를 호출하였지만, 예상과 다른 결과를 받게 된다. 
-
-특히 EVM은 함수의 식별을 할 때, 함수 시그니처를 해싱한 후 앞 4바이트만 사용한다. 같은 컨트랙트 내부에서는 솔리디티 컴파일리가 함수의 충돌을 방지하지만, 프록시와 타겟 컨트랙트는 별도의 컨트랙트임으로 함수명과 파라미터등이 다른 경우에도 얼마든지 충돌이 발생할 수 있다.
+그런데 만약 EVM이 인식하기에 기능 컨트랙트의 함수와 같은 함수가 프록시에 존재할 경우, fallback을 통한 위임이 아닌 프록시의 함수가 수행된다. 특히 EVM은 함수를 식별할 때, 함수 시그니처를 해싱한 후 앞 4바이트만 사용하기에 이러한 경우는 꽤나 빈번하게 발생할 수 있다. 같은 컨트랙트 내부에서는 솔리디티 컴파일리가 함수의 충돌을 방지하지만, 프록시와 타겟 컨트랙트는 별도의 컨트랙트임으로 함수명과 파라미터등이 다른 경우에도 얼마든지 충돌이 발생할 수 있다.
 
 ![image-20240913142024445](C:\Users\Owner\AppData\Roaming\Typora\typora-user-images\image-20240913142024445.png)
 
 
 
-
-
-
-
-
-
 #3 구현
 
+이러한 문제점들을 방지하기 위해서는 다음의 사항들을 고려하며 컨트랙트들을 구현해야 한다.
 
+
+
+초기화 함수
+
+프록시 패턴에서는 constructor의 역할을 초기화 함수 (initialize)에게 맡긴다. 초기화 함수를 통해서 로직 컨트랙트의 초기 상태를 프록시에 저장할 수 있도록 한다. 이때 초기화 함수는 `initializer` modifier를 적용시켜, **배포 버전당 단 한 번만 실행**되는 것을 보장해야 한다. 이 구조는 각 버전 내에서의 재실행을 방지하지만, 로직 컨트랙트의 업그레이드가 초기화를 추가적으로 필요로하는 경우 새로운 초기화 단계를 생성할 수 있도록 한다.
 
 
 
 EIP-1967(Standard Proxy Storage Slots)
 
-프록시의 변수와 로직 컨트랙트의 변수간 슬롯 충돌을 방지하게 위해 EIP-1967은 스토리지 슬롯을 순차적으로 사용하면 충돌 가능성이 높으니, **슬롯을 랜덤에 가깝게(pseudo-random) 배정**하는 방식을 사용한다. 프록시의 변수를 정의된 순서에 따라 순차적으로 배정하는 것이 아닌,  변수의 이름을 keccak256으로 해싱한 후 1을 뺀 값의 슬롯에 직접적으로 배정한다. keccak256 해시값을 슬롯 위치로 사용한다면, 슬롯이 충돌할 확률을 무시 가능할 정도로 낮기에 충돌 방지를 보장할 수 있게 된다. 
+프록시의 변수와 로직 컨트랙트의 변수간 슬롯 충돌을 방지하게 위해 EIP-1967은 스토리지 슬롯을 순차적인 방식이 아닌 **슬롯을 랜덤에 가깝게(pseudo-random) 배정**하는 방식을 사용한다. 프록시의 변수를 `keccak256({변수명})-1` (변수의 이름을 keccak256으로 해싱한 후 1을 뺀 값)의 슬롯에 직접적으로 배정한다. keccak256 해시값을 슬롯 위치로 사용한다면, 슬롯이 충돌할 확률을 무시 가능할 정도로 낮기에 충돌 방지를 보장할 수 있게 된다. 
 
 :memo: [참고] 1을 빼는 이유
 
 keccak256 해시값은 유사 난수이기 때문에, account에서 keccak256을 사용해서 슬롯을 배정을 하고 있었다면 슬롯이 충돌될 가능성이 있다. 따라서 결과값에서 1을 뺌으로써 역상이 없는 난수를 만들어 충돌할 가능성을 없앤다. 
 
-<코드>
+
+
+상속
+
+로직 컨트랙의 버전간 슬롯 충돌을 방지하기 위해서는, 버전을 업그레이드할 때 1.기존 변수들의 순서를 유지하고, 2.새로운 변수는 기존 변수들 이후에 선언되어야 한다. 이 룰을 지키면서 차기 버전의 컨트랙트를 개발하는 방식도 있겠지만 상속을 활용한다면 무의식적인 실수를 방지할 수 있다. 솔리디티의 상속은 상태 변수 간의 순서를 유지하여, 이를 활용한다면 업그레이드 전반에 걸쳐 storage layout을 일관성있게 유지하게 해준다.
 
 
 
-상속너
+proxy selector clashing 문제를 막기 위해서, 호출한 계정의 권한에 따라서 호출 가능한 함수를 분리시키는 방법을 사용한다. `msg.sender`를 키로 사용해서, 호출 계정이 admin 계정만 컨트랙트 업그레이드와 같은 관리 함수를 호출할 수 있게 하고, admin 계정 외에는 
 
 
 
-Transparaent
+Transparent 패턴 /  UUPS 패턴
 
-UUPS
-
-생성자초기화
+proxy selector clashing 문제를 막기 위해서, 호출한 계정의 권한에 따라서 호출 가능한 함수를 분리시키는 방법을 사용한다.
 
 
+
+우선, Transparent 패턴은 `msg.sender`를 키로 사용하여 프록시에서 함수를 사용할지 로직에서 함수를 사용할지를 결정한다. 만약 `msg.sender`가 프록시의 관리자 주소와 같다면, `delegatecall`에 의해 함수가 호출되지 않는다. 만약 `msg.sender`가 관리자 주소이 아니라면, 프록시는 `delegatecall`만 사용하고 프록시에 정의된 다른 함수는 사용하지 않는다. 
+
+
+
+UUPS도 동일한 방식으로 `msg.sender`를 키로 사용한다. 유일한 차이점은 **로직 컨트랙트를 업그레이드하는 함수를 어디에 두느냐**이다. 
+
+Transparant proxy Pattern에서는 업그레이드 함수가 프록시에 둔다. 따라서, 로직 컨트랙트를 변경하는 방식은 업그레이드와 상관 없이 변하지 않는다.
+
+반대로 UUPS에서는 업그레이드하는 함수가 로직 컨트랙트에 구현되어 있다. 이로 인해 업그레이드 매커니즘이 시간이 지남에 따라 변경될 수 있다. 특히, **새로운 버전의 로직 컨트랙트가 업그레이드 매커니즘을 포함하지 않는다면, 더 이상 업그레이드를 할 수 없는 상태가 되어버린다**. 
+
+
+
+이 두가지 패턴 중에서 UUPS 패턴이 더 권장된다. 업그레이더블이 가지는 버그와 기능 수정의 장점을 가지면서도, 일정 단계 이후에는 절대 변하지 않음을 보장할 수 있기 때문이다. 다만, 이 패턴을 사용할 때에는 업그레이드 옵션을 실수로 제거하지 않도록 신중한 주의가 필요하다. 
 
 
 
@@ -170,42 +184,12 @@ UUPS
 
 
 
-## 개요
-
-
-
-One of the biggest advantages of Ethereum is that every transaction of moving funds, every contract deployed, and every transaction made to a contract is *immutable* There is no way to hide or amend any transactions ever made. 
-
-
-
-But the biggest disadvantage is that you cannot change the source code of your smart contract after it’s been deployed. Developers working on centralized applications (like Facebook, or Airbnb) are used to frequent updates in order to fix bugs or introduce new features. This is impossible to do on Ethereum with traditional patterns
 
 
 
 
-
-## 업그레이더블 컨트랙트 패턴
-
-
-
-### EIP-1967
-
-### 
-
-### Transparent 프록시 패턴
-
-### UUPS
-
-
-
-## 컨트랙트 재사용
-
-
-
-## 별첨. Minimal Proxy
-
-
-
-
+## 참고자료
 
 https://www.rareskills.io/post/erc1967
+
+https://medium.com/coinmonks/transparent-proxy-pattern-uups-d7416916789f
